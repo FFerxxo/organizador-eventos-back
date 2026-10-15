@@ -233,7 +233,7 @@ def formato_horas(horas):
 
 
 def esta_finalizada(estado):
-    return str(estado).strip().lower() == "finalizado"
+    return str(estado).strip().lower() in ("hecha", "finalizado")
 
 
 DIAS_PARA_SUGERIR = 14
@@ -248,7 +248,9 @@ def horas_por_dia(organizador, desde, hasta, sin_subtarea=None):
     gestiones = Subtarea.objects.filter(
         evento__organizador=organizador,
         fecha_objetivo__range=(desde, hasta),
-    ).exclude(estado__iexact="finalizado")
+    ).exclude(estado__iexact="hecha").exclude(
+        estado__iexact="finalizado"
+    )
 
     if sin_subtarea is not None:
         gestiones = gestiones.exclude(pk=sin_subtarea.pk)
@@ -759,6 +761,8 @@ def subtareas_hoy(request):
 
     # Por defecto, no mostrar finalizadas en Vista Hoy
     subtareas_base = subtareas_base.exclude(
+        estado__iexact="hecha"
+    ).exclude(
         estado__iexact="finalizado"
     )
 

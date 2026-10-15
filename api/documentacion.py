@@ -111,7 +111,7 @@ FILTROS_HOY = [
     OpenApiParameter(
         "estado",
         str,
-        enum=["por hacer", "en curso", "finalizado"],
+        enum=["por hacer", "en curso", "hecha", "pospuesta"],
         description="Solo las gestiones en ese estado.",
     ),
 ]
