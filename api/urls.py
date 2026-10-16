@@ -8,7 +8,6 @@ from .views import (
     limite_diario,
     eventos_list_create,
     evento_detail,
-    evento_progreso,
     subtareas_by_evento,
     subtarea_detail,
     subtareas_hoy,
@@ -24,11 +23,6 @@ urlpatterns = [
 
     path("eventos/", eventos_list_create, name="eventos_list_create"),
     path("eventos/<int:pk>/", evento_detail, name="evento_detail"),
-    path(
-    "eventos/<int:pk>/progreso/",
-    evento_progreso,
-    name="evento_progreso",
-),
     path("eventos/<int:evento_id>/subtareas/", subtareas_by_evento, name="subtareas_by_evento"),
 
     path("subtareas/hoy/", subtareas_hoy, name="subtareas_hoy"),

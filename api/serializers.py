@@ -77,7 +77,6 @@ class SubtareaSerializer(serializers.ModelSerializer):
             "horas_estimadas",
             "estado",
             "created_at",
-            "nota",
         ]
         read_only_fields = ["id", "evento", "created_at"]
         extra_kwargs = {
@@ -90,13 +89,7 @@ class SubtareaSerializer(serializers.ModelSerializer):
                     "punto: 1.5."
                 ),
             },
-            "nota": {
-                "error_messages": {
-                    "max_length": "La nota no puede superar los 200 caracteres.",
-                },
-            },
         }
-
 
     def validate_titulo(self, value):
         if not value.strip():
@@ -116,12 +109,6 @@ class SubtareaSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(MENSAJE_ESTADO_INVALIDO)
         return estado
 
-    def validate_nota(self, value):
-        if value and len(value) > 200:
-            raise serializers.ValidationError(
-                "La nota no puede superar los 200 caracteres."
-            )
-        return value
 
 CAMPOS_CLIENTE = ["cliente_nombre", "cliente_telefono", "cliente_correo"]
 TELEFONO_VALIDO = re.compile(r"^[\d\s+\-()]+$")
