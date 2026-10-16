@@ -86,6 +86,12 @@ class GestionesHoySerializer(serializers.Serializer):
     para_hoy = SubtareaSerializer(many=True)
     proximas = SubtareaSerializer(many=True)
 
+class ProgresoEventoSerializer(serializers.Serializer):
+    evento_id = serializers.IntegerField()
+    total = serializers.IntegerField()
+    finalizadas = serializers.IntegerField()
+    pendientes = serializers.IntegerField()
+    porcentaje = serializers.IntegerField()
 
 NO_AUTENTICADO = OpenApiResponse(
     ErrorSerializer,
@@ -111,7 +117,7 @@ FILTROS_HOY = [
     OpenApiParameter(
         "estado",
         str,
-        enum=["por hacer", "en curso", "finalizado"],
+        enum=["por hacer", "en curso", "hecha", "pospuesta"],
         description="Solo las gestiones en ese estado.",
     ),
 ]
@@ -121,6 +127,7 @@ GESTION = {
     "evento": 31,
     "titulo": "Buscar proveedores",
     "descripcion": None,
+    "nota": "Confirmar disponibilidad con el proveedor",
     "fecha_objetivo": "2026-10-12",
     "horas_estimadas": "2.00",
     "estado": "por hacer",
