@@ -701,6 +701,109 @@ class EstadosDeGestionTests(ApiTestCase):
         self.assertIn("Estado inválido", respuesta.data["estado"][0])
         self.assertEqual(Subtarea.objects.get(pk=gestion).estado, "por hacer")
 
+    def test_marcar_gestion_como_hecha(self):
+        gestion = self.crear_gestion(
+            self.evento, "Reservar salón", DIA_X, 1
+        )
+
+        respuesta = self.cambiar_gestion(gestion, estado="hecha")
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta.data["estado"], "hecha")
+        self.assertEqual(
+            Subtarea.objects.get(pk=gestion).estado, "hecha"
+        )
+
+    def test_completada_vieja_cuenta_como_hecha(self):
+        gestion = self.crear_gestion(self.evento, "Reservar salón", DIA_X, 1)
+        Subtarea.objects.filter(pk=gestion).update(estado="completada")
+
+        progreso = self.client.get(f"/api/eventos/{self.evento}/progreso/").data
+        self.assertEqual(progreso["finalizadas"], 1)
+
+        self.assertEqual(self.cambiar_gestion(gestion, estado="completada").data["estado"], "hecha")
+
+    def test_posponer_gestion_con_nota(self):
+        gestion = self.crear_gestion(
+            self.evento, "Reservar salón", DIA_X, 1
+        )
+
+        nota = "Esperando confirmación del salón"
+        respuesta = self.cambiar_gestion(
+            gestion, estado="pospuesta", nota=nota
+        )
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta.data["estado"], "pospuesta")
+        self.assertEqual(respuesta.data["nota"], nota)
+
+        guardada = Subtarea.objects.get(pk=gestion)
+        self.assertEqual(guardada.estado, "pospuesta")
+        self.assertEqual(guardada.nota, nota)
+
+    def test_nota_se_devuelve_en_get(self):
+        gestion = self.crear_gestion(self.evento, "Reservar salón", DIA_X, 1)
+
+        nota = "Esperando confirmación del salón"
+        respuesta_patch = self.cambiar_gestion(gestion, estado="pospuesta", nota=nota)
+
+        self.assertEqual(respuesta_patch.status_code, 200)
+
+        respuesta_get = self.client.get(f"/api/subtareas/{gestion}/")
+
+        self.assertEqual(respuesta_get.status_code, 200)
+        self.assertEqual(respuesta_get.data["nota"], nota)
+        self.assertEqual(respuesta_get.data["estado"], "pospuesta")
+
+    def test_nota_mayor_a_200_caracteres_es_rechazada(self):
+        gestion = self.crear_gestion(self.evento, "Reservar salón", DIA_X, 1)
+
+        respuesta = self.cambiar_gestion(gestion, nota="a" * 201)
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn("nota", respuesta.data)
+        self.assertIn("La nota no puede superar los 200 caracteres.",respuesta.data["nota"][0],)
+
+        guardada = Subtarea.objects.get(pk=gestion)
+        self.assertIsNone(guardada.nota)
+
+class ProgresoEventoTests(ApiTestCase):
+    def setUp(self):
+        self.entrar("prueba1@correo.com")
+        self.evento = self.crear_evento()
+
+    def test_progreso_sin_subtareas(self):
+        respuesta = self.client.get(
+            f"/api/eventos/{self.evento}/progreso/"
+        )
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta.data["total"], 0)
+        self.assertEqual(respuesta.data["finalizadas"], 0)
+        self.assertEqual(respuesta.data["pendientes"], 0)
+        self.assertEqual(respuesta.data["porcentaje"], 0)
+
+    def test_progreso_redondea_porcentaje_hacia_arriba(self):
+        for i in range(8):
+            gestion = self.crear_gestion(
+                self.evento,
+                f"Gestión {i + 1}",
+                (date(2030, 1, 15) + timedelta(days=i)).isoformat(),
+                1,
+            )
+
+            if i == 0:
+                self.cambiar_gestion(gestion, estado="hecha")
+
+        respuesta = self.client.get(
+            f"/api/eventos/{self.evento}/progreso/"
+        )
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta.data["total"], 8)
+        self.assertEqual(respuesta.data["finalizadas"], 1)
+        self.assertEqual(respuesta.data["pendientes"], 7)
+        self.assertEqual(respuesta.data["porcentaje"], 13)
 
 class ContactoDelClienteTests(ApiTestCase):
     """Nombre, teléfono y correo del cliente en vez de un solo texto."""
@@ -805,3 +908,48 @@ class ContactoDelClienteTests(ApiTestCase):
         self.assertEqual(otro_dato.data["cliente_contacto"], "Ana Torres")
         self.assertEqual(solo_nombre.status_code, 400)
         self.assertIn("cliente_telefono", solo_nombre.data)
+
+
+class HechasYPospuestasTests(ApiTestCase):
+    def setUp(self):
+        self.entrar("prueba1@correo.com")
+        self.evento = self.crear_evento()
+
+    def test_hoy_no_muestra_hechas_pero_si_pospuestas(self):
+        hoy = timezone.localdate()
+        manana = hoy + timedelta(days=1)
+        pendiente = self.crear_gestion(self.evento, "Pendiente", hoy, 1)
+        for estado in ("hecha", "finalizado", "completada"):
+            gestion = self.crear_gestion(self.evento, estado, hoy, 1)
+            Subtarea.objects.filter(pk=gestion).update(estado=estado)
+        pospuesta = self.crear_gestion(self.evento, "Pospuesta", manana, 1)
+        self.assertEqual(self.cambiar_gestion(pospuesta, estado="pospuesta").status_code, 200)
+
+        respuesta = self.client.get("/api/subtareas/hoy/").data
+
+        self.assertEqual([g["id"] for g in respuesta["para_hoy"]], [pendiente])
+        self.assertEqual([g["id"] for g in respuesta["proximas"]], [pospuesta])
+        self.assertEqual(respuesta["proximas"][0]["estado"], "pospuesta")
+
+    def test_las_horas_del_dia_no_cuentan_las_hechas(self):
+        dia = timezone.localdate() + timedelta(days=1)
+        otro_dia = dia + timedelta(days=1)
+        hecha = self.crear_gestion(self.evento, "Hecha", dia, 6)
+        Subtarea.objects.filter(pk=hecha).update(estado="hecha")
+        nueva = self.crear_gestion(self.evento, "Nueva", otro_dia, 6)
+
+        # Límite de 6 h: si las 6 h de la hecha contaran, no cabría.
+        respuesta = self.cambiar_gestion(nueva, fecha_objetivo=dia)
+
+        self.assertEqual(respuesta.status_code, 200)
+
+    def test_posponer_a_un_dia_lleno_da_conflicto(self):
+        dia = timezone.localdate() + timedelta(days=1)
+        otro_dia = dia + timedelta(days=1)
+        self.crear_gestion(self.evento, "Día lleno", dia, 6)
+        gestion = self.crear_gestion(self.evento, "Posponer", otro_dia, 2)
+
+        respuesta = self.cambiar_gestion(gestion, fecha_objetivo=dia, estado="pospuesta")
+
+        self.assertEqual(respuesta.status_code, 409)
+        self.assertEqual(respuesta.data["codigo"], "sobrecarga_diaria")

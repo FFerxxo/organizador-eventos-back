@@ -86,6 +86,12 @@ class GestionesHoySerializer(serializers.Serializer):
     para_hoy = SubtareaSerializer(many=True)
     proximas = SubtareaSerializer(many=True)
 
+class ProgresoEventoSerializer(serializers.Serializer):
+    evento_id = serializers.IntegerField()
+    total = serializers.IntegerField()
+    finalizadas = serializers.IntegerField()
+    pendientes = serializers.IntegerField()
+    porcentaje = serializers.IntegerField()
 
 NO_AUTENTICADO = OpenApiResponse(
     ErrorSerializer,
@@ -111,7 +117,7 @@ FILTROS_HOY = [
     OpenApiParameter(
         "estado",
         str,
-        enum=["por hacer", "en curso", "finalizado"],
+        enum=["por hacer", "en curso", "hecha", "pospuesta"],
         description="Solo las gestiones en ese estado.",
     ),
 ]
@@ -121,6 +127,7 @@ GESTION = {
     "evento": 31,
     "titulo": "Buscar proveedores",
     "descripcion": None,
+    "nota": "Confirmar disponibilidad con el proveedor",
     "fecha_objetivo": "2026-10-12",
     "horas_estimadas": "2.00",
     "estado": "por hacer",
@@ -230,6 +237,36 @@ EJEMPLO_EDITAR_GESTION = OpenApiExample(
         "horas_estimadas": 1.5,
     },
     request_only=True,
+)
+
+EJEMPLO_MARCAR_HECHA = OpenApiExample(
+    "Marcar una gestión como hecha",
+    value={"estado": "hecha"},
+    request_only=True,
+)
+
+EJEMPLO_POSPONER = OpenApiExample(
+    "Posponer una gestión con nota",
+    value={
+        "estado": "pospuesta",
+        "fecha_objetivo": "2026-10-19",
+        "nota": "Esperando confirmación del salón",
+    },
+    request_only=True,
+)
+
+EJEMPLO_ERROR_NOTA = OpenApiExample(
+    "La nota es muy larga",
+    value={"nota": ["La nota no puede superar los 200 caracteres."]},
+    response_only=True,
+    status_codes=["400"],
+)
+
+EJEMPLO_ERROR_ESTADO = OpenApiExample(
+    "El estado no existe",
+    value={"estado": ["Estado inválido. Usa: por hacer, en curso, hecha o pospuesta."]},
+    response_only=True,
+    status_codes=["400"],
 )
 
 EJEMPLO_REDUCIR = OpenApiExample(

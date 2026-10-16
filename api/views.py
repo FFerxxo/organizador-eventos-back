@@ -1,5 +1,5 @@
 ﻿from datetime import timedelta
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 
 from django.db.models import Q, Sum
 from django.utils import timezone
@@ -11,10 +11,15 @@ from django.contrib.auth.hashers import check_password, make_password
 from django.core import signing
 from django.db import IntegrityError
 
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import extend_schema, OpenApiResponse, OpenApiExample
 
 from . import documentacion as doc
-from .estados import MENSAJE_ESTADO_INVALIDO, formas_de, normalizar_estado
+from .estados import (
+    HECHA,
+    MENSAJE_ESTADO_INVALIDO,
+    formas_de,
+    normalizar_estado,
+)
 from .models import Organizador, Evento, Subtarea
 from .serializers import (
     EventoSerializer,
@@ -232,8 +237,18 @@ def formato_horas(horas):
     return texto or "0"
 
 
-def esta_finalizada(estado):
-    return str(estado).strip().lower() == "finalizado"
+def con_estado(*estados):
+    """Filtro por estado que incluye los nombres viejos y no distingue mayúsculas."""
+    coincide = Q()
+    for estado in estados:
+        for forma in formas_de(estado):
+            coincide |= Q(estado__iexact=forma)
+    return coincide
+
+
+def esta_hecha(estado):
+    """Una gestión hecha ya no cuenta en las horas del día."""
+    return normalizar_estado(estado) == HECHA
 
 
 DIAS_PARA_SUGERIR = 14
@@ -248,7 +263,7 @@ def horas_por_dia(organizador, desde, hasta, sin_subtarea=None):
     gestiones = Subtarea.objects.filter(
         evento__organizador=organizador,
         fecha_objetivo__range=(desde, hasta),
-    ).exclude(estado__iexact="finalizado")
+    ).exclude(con_estado(HECHA))
 
     if sin_subtarea is not None:
         gestiones = gestiones.exclude(pk=sin_subtarea.pk)
@@ -348,11 +363,11 @@ def detectar_sobrecarga(organizador, subtarea, cambios):
     horas = cambios.get("horas_estimadas", subtarea.horas_estimadas)
     estado = cambios.get("estado", subtarea.estado)
 
-    if esta_finalizada(estado):
+    if esta_hecha(estado):
         return None
 
     horas_antes = Decimal("0")
-    if subtarea.fecha_objetivo == fecha and not esta_finalizada(subtarea.estado):
+    if subtarea.fecha_objetivo == fecha and not esta_hecha(subtarea.estado):
         horas_antes = subtarea.horas_estimadas
 
     if horas <= horas_antes:
@@ -553,6 +568,94 @@ def evento_detail(request, pk):
 
 
 @extend_schema(
+    tags=["Eventos"],
+    summary="Consultar el progreso de un evento",
+    description=(
+        "Devuelve el total de subtareas del evento, cuántas están hechas "
+        "(`finalizadas`, que incluye las guardadas con el nombre viejo "
+        "`finalizado` o `completada`), cuántas siguen pendientes y el "
+        "porcentaje de progreso. El porcentaje se redondea al entero más "
+        "cercano (.5 sube); si el evento no tiene subtareas, devuelve 0."
+    ),
+    responses={
+        200: OpenApiResponse(
+            response=doc.ProgresoEventoSerializer,
+            description="Progreso calculado correctamente.",
+            examples=[
+                OpenApiExample(
+                    "Evento con progreso",
+                    value={
+                        "evento_id": 3,
+                        "total": 8,
+                        "finalizadas": 3,
+                        "pendientes": 5,
+                        "porcentaje": 38,
+                    },
+                    response_only=True,
+                    status_codes=["200"],
+                ),
+                OpenApiExample(
+                    "Evento sin subtareas",
+                    value={
+                        "evento_id": 3,
+                        "total": 0,
+                        "finalizadas": 0,
+                        "pendientes": 0,
+                        "porcentaje": 0,
+                    },
+                    response_only=True,
+                    status_codes=["200"],
+                ),
+            ],
+        ),
+        401: doc.NO_AUTENTICADO,
+        404: doc.EVENTO_NO_ENCONTRADO,
+    },
+)
+
+@api_view(["GET"])
+def evento_progreso(request, pk):
+    organizador, error = obtener_organizador_autenticado(request)
+    if error:
+        return error
+
+    try:
+        evento = Evento.objects.get(
+            pk=pk,
+            organizador=organizador,
+        )
+    except Evento.DoesNotExist:
+        return Response(
+            {"detail": "El evento no existe o no pertenece al organizador."},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    subtareas = Subtarea.objects.filter(evento=evento)
+    total = subtareas.count()
+
+    finalizadas = subtareas.filter(con_estado(HECHA)).count()
+
+    pendientes = total - finalizadas
+
+    if total == 0:
+        porcentaje = 0
+    else:
+        porcentaje = int(
+            (Decimal(finalizadas) * Decimal("100") / Decimal(total)).quantize(
+                Decimal("1"),
+                rounding=ROUND_HALF_UP,
+            )
+        )
+
+    return Response({
+        "evento_id": evento.id,
+        "total": total,
+        "finalizadas": finalizadas,
+        "pendientes": pendientes,
+        "porcentaje": porcentaje,
+    })
+
+@extend_schema(
     methods=["GET"],
     tags=["Gestiones"],
     operation_id="gestiones_listar",
@@ -563,6 +666,7 @@ def evento_detail(request, pk):
         404: doc.EVENTO_NO_ENCONTRADO,
     },
 )
+
 @extend_schema(
     methods=["POST"],
     tags=["Gestiones"],
@@ -620,18 +724,26 @@ def subtareas_by_evento(request, evento_id):
     summary="Editar o reprogramar una gestión",
     description=(
         "Se pueden mandar solo los campos que cambian. La aplicación lo usa de "
-        "dos formas: **Editar** manda `titulo`, `descripcion`, `estado`, "
+        "cuatro formas: **Editar** manda `titulo`, `descripcion`, `estado`, "
         "`fecha_objetivo` y `horas_estimadas`; **Reprogramar** manda "
-        "`fecha_objetivo` y, si cambian, `horas_estimadas`.\n\n"
+        "`fecha_objetivo` y, si cambian, `horas_estimadas`; **Marcar como "
+        "hecha** manda `estado: \"hecha\"`; **Posponer** manda `estado: "
+        "\"pospuesta\"`, la nueva `fecha_objetivo` y una `nota` opcional.\n\n"
+        "`estado` acepta `por hacer`, `en curso`, `hecha` y `pospuesta`; los "
+        "nombres viejos (`finalizado`, `completada`, `pendiente`...) se leen "
+        "como su equivalente y se guardan con el nombre actual. `nota` es "
+        "opcional y admite hasta 200 caracteres: si pasa, responde 400 con un "
+        "mensaje corto. Si no se manda, la gestión conserva la que tenía.\n\n"
         "Cuando cambia la fecha o suben las horas, antes de guardar se suman "
-        "las horas de las gestiones sin finalizar del organizador para ese día, "
+        "las horas de las gestiones sin hacer del organizador para ese día, "
         "en todos sus eventos. Si el cambio le agrega horas al día y el total "
         "pasa del límite diario, no guarda y responde 409 con `detail`, "
         "`codigo`, y en `conflicto` las cifras, las horas que quedan libres, "
         "hasta tres fechas cercanas donde la gestión sí cabe (`fechas_sugeridas`) "
         "y el primer día posterior con espacio (`fecha_posponer`).\n\n"
-        "Bajar solo las horas, o cambiar título, descripción o estado, no da "
-        "conflicto.\n\n"
+        "Bajar solo las horas, cambiar título o descripción, o marcar la gestión "
+        "como hecha, no da conflicto. Una pospuesta sí cuenta sus horas en su "
+        "nueva fecha.\n\n"
         "El conflicto se resuelve con otra petición igual: con una fecha que "
         "tenga espacio, con la misma fecha y menos `horas_estimadas`, o con "
         "`fecha_posponer`."
@@ -647,8 +759,12 @@ def subtareas_by_evento(request, evento_id):
     examples=[
         doc.EJEMPLO_EDITAR_GESTION,
         doc.EJEMPLO_REPROGRAMAR,
+        doc.EJEMPLO_MARCAR_HECHA,
+        doc.EJEMPLO_POSPONER,
         doc.EJEMPLO_REDUCIR,
         doc.EJEMPLO_GUARDADA,
+        doc.EJEMPLO_ERROR_NOTA,
+        doc.EJEMPLO_ERROR_ESTADO,
         doc.EJEMPLO_SOBRECARGA,
     ],
 )
@@ -714,10 +830,12 @@ REGLA_HOY = (
     operation_id="gestiones_hoy",
     summary="Gestiones para la vista Hoy",
     description=(
-        "Gestiones sin finalizar del organizador, agrupadas en vencidas, para "
+        "Gestiones sin hacer del organizador, agrupadas en vencidas, para "
         "hoy y próximas. Primero van las vencidas, luego las de hoy y al final "
         "las próximas. Dentro de cada grupo van por fecha objetivo y, si dos "
-        "coinciden, primero la que toma menos horas."
+        "coinciden, primero la que toma menos horas. Las hechas no salen; las "
+        "pospuestas salen en su nueva fecha, con `estado: \"pospuesta\"` y su "
+        "`nota`."
     ),
     parameters=doc.FILTROS_HOY,
     responses={
@@ -757,10 +875,9 @@ def subtareas_hoy(request):
         evento__organizador=organizador
     )
 
-    # Por defecto, no mostrar finalizadas en Vista Hoy
-    subtareas_base = subtareas_base.exclude(
-        estado__iexact="finalizado"
-    )
+    # Por defecto, no mostrar las hechas en Vista Hoy; las pospuestas salen
+    # en su nueva fecha.
+    subtareas_base = subtareas_base.exclude(con_estado(HECHA))
 
     # Filtro por evento
     if evento_id:
@@ -788,10 +905,7 @@ def subtareas_hoy(request):
             )
 
         # Incluye las gestiones guardadas con los nombres viejos del estado.
-        coincide = Q()
-        for forma in formas_de(estado_pedido):
-            coincide |= Q(estado__iexact=forma)
-        subtareas_base = subtareas_base.filter(coincide)
+        subtareas_base = subtareas_base.filter(con_estado(estado_pedido))
 
     vencidas = subtareas_base.filter(
         fecha_objetivo__lt=hoy
