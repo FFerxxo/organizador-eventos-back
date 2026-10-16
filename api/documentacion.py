@@ -86,6 +86,12 @@ class GestionesHoySerializer(serializers.Serializer):
     para_hoy = SubtareaSerializer(many=True)
     proximas = SubtareaSerializer(many=True)
 
+class ProgresoEventoSerializer(serializers.Serializer):
+    evento_id = serializers.IntegerField()
+    total = serializers.IntegerField()
+    finalizadas = serializers.IntegerField()
+    pendientes = serializers.IntegerField()
+    porcentaje = serializers.IntegerField()
 
 NO_AUTENTICADO = OpenApiResponse(
     ErrorSerializer,

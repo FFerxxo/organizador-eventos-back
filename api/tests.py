@@ -758,6 +758,44 @@ class EstadosDeGestionTests(ApiTestCase):
         guardada = Subtarea.objects.get(pk=gestion)
         self.assertIsNone(guardada.nota)
 
+class ProgresoEventoTests(ApiTestCase):
+    def setUp(self):
+        self.entrar("prueba1@correo.com")
+        self.evento = self.crear_evento()
+
+    def test_progreso_sin_subtareas(self):
+        respuesta = self.client.get(
+            f"/api/eventos/{self.evento}/progreso/"
+        )
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta.data["total"], 0)
+        self.assertEqual(respuesta.data["finalizadas"], 0)
+        self.assertEqual(respuesta.data["pendientes"], 0)
+        self.assertEqual(respuesta.data["porcentaje"], 0)
+
+    def test_progreso_redondea_porcentaje_hacia_arriba(self):
+        for i in range(8):
+            gestion = self.crear_gestion(
+                self.evento,
+                f"Gestión {i + 1}",
+                (date(2030, 1, 15) + timedelta(days=i)).isoformat(),
+                1,
+            )
+
+            if i == 0:
+                self.cambiar_gestion(gestion, estado="hecha")
+
+        respuesta = self.client.get(
+            f"/api/eventos/{self.evento}/progreso/"
+        )
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta.data["total"], 8)
+        self.assertEqual(respuesta.data["finalizadas"], 1)
+        self.assertEqual(respuesta.data["pendientes"], 7)
+        self.assertEqual(respuesta.data["porcentaje"], 13)
+
 class ContactoDelClienteTests(ApiTestCase):
     """Nombre, teléfono y correo del cliente en vez de un solo texto."""
 
