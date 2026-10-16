@@ -1,5 +1,5 @@
 ﻿from datetime import timedelta
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal
 
 from django.db.models import Q, Sum
 from django.utils import timezone
@@ -11,7 +11,7 @@ from django.contrib.auth.hashers import check_password, make_password
 from django.core import signing
 from django.db import IntegrityError
 
-from drf_spectacular.utils import extend_schema, OpenApiResponse, OpenApiExample
+from drf_spectacular.utils import extend_schema
 
 from . import documentacion as doc
 from .estados import MENSAJE_ESTADO_INVALIDO, formas_de, normalizar_estado
@@ -233,7 +233,7 @@ def formato_horas(horas):
 
 
 def esta_finalizada(estado):
-    return str(estado).strip().lower() in ("hecha", "finalizado")
+    return str(estado).strip().lower() == "finalizado"
 
 
 DIAS_PARA_SUGERIR = 14
@@ -248,9 +248,7 @@ def horas_por_dia(organizador, desde, hasta, sin_subtarea=None):
     gestiones = Subtarea.objects.filter(
         evento__organizador=organizador,
         fecha_objetivo__range=(desde, hasta),
-    ).exclude(estado__iexact="hecha").exclude(
-        estado__iexact="finalizado"
-    )
+    ).exclude(estado__iexact="finalizado")
 
     if sin_subtarea is not None:
         gestiones = gestiones.exclude(pk=sin_subtarea.pk)
@@ -555,95 +553,6 @@ def evento_detail(request, pk):
 
 
 @extend_schema(
-    tags=["Eventos"],
-    summary="Consultar el progreso de un evento",
-    description=(
-        "Devuelve el total de subtareas del evento, cuántas están "
-        "finalizadas, cuántas siguen pendientes y el porcentaje de "
-        "progreso. El porcentaje se redondea al entero más cercano; "
-        "si el evento no tiene subtareas, devuelve 0."
-    ),
-    responses={
-        200: OpenApiResponse(
-            response=doc.ProgresoEventoSerializer,
-            description="Progreso calculado correctamente.",
-            examples=[
-                OpenApiExample(
-                    "Evento con progreso",
-                    value={
-                        "evento_id": 3,
-                        "total": 8,
-                        "finalizadas": 3,
-                        "pendientes": 5,
-                        "porcentaje": 38,
-                    },
-                    response_only=True,
-                    status_codes=["200"],
-                ),
-                OpenApiExample(
-                    "Evento sin subtareas",
-                    value={
-                        "evento_id": 3,
-                        "total": 0,
-                        "finalizadas": 0,
-                        "pendientes": 0,
-                        "porcentaje": 0,
-                    },
-                    response_only=True,
-                    status_codes=["200"],
-                ),
-            ],
-        ),
-        401: doc.NO_AUTENTICADO,
-        404: doc.EVENTO_NO_ENCONTRADO,
-    },
-)
-
-@api_view(["GET"])
-def evento_progreso(request, pk):
-    organizador, error = obtener_organizador_autenticado(request)
-    if error:
-        return error
-
-    try:
-        evento = Evento.objects.get(
-            pk=pk,
-            organizador=organizador,
-        )
-    except Evento.DoesNotExist:
-        return Response(
-            {"detail": "El evento no existe o no pertenece al organizador."},
-            status=status.HTTP_404_NOT_FOUND,
-        )
-
-    subtareas = Subtarea.objects.filter(evento=evento)
-    total = subtareas.count()
-
-    finalizadas = subtareas.filter(
-        Q(estado__iexact="hecha") | Q(estado__iexact="finalizado")
-    ).count()
-
-    pendientes = total - finalizadas
-
-    if total == 0:
-        porcentaje = 0
-    else:
-        porcentaje = int(
-            (Decimal(finalizadas) * Decimal("100") / Decimal(total)).quantize(
-                Decimal("1"),
-                rounding=ROUND_HALF_UP,
-            )
-        )
-
-    return Response({
-        "evento_id": evento.id,
-        "total": total,
-        "finalizadas": finalizadas,
-        "pendientes": pendientes,
-        "porcentaje": porcentaje,
-    })
-
-@extend_schema(
     methods=["GET"],
     tags=["Gestiones"],
     operation_id="gestiones_listar",
@@ -654,7 +563,6 @@ def evento_progreso(request, pk):
         404: doc.EVENTO_NO_ENCONTRADO,
     },
 )
-
 @extend_schema(
     methods=["POST"],
     tags=["Gestiones"],
@@ -851,8 +759,6 @@ def subtareas_hoy(request):
 
     # Por defecto, no mostrar finalizadas en Vista Hoy
     subtareas_base = subtareas_base.exclude(
-        estado__iexact="hecha"
-    ).exclude(
         estado__iexact="finalizado"
     )
 

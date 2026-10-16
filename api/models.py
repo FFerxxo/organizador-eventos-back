@@ -60,7 +60,6 @@ class Subtarea(models.Model):
     fecha_objetivo = models.DateField()
     horas_estimadas = models.DecimalField(max_digits=4, decimal_places=2, default=1)
     estado = models.TextField(default="por hacer")
-    nota = models.CharField(max_length=200, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
