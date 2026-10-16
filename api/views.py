@@ -571,10 +571,11 @@ def evento_detail(request, pk):
     tags=["Eventos"],
     summary="Consultar el progreso de un evento",
     description=(
-        "Devuelve el total de subtareas del evento, cuántas están "
-        "finalizadas, cuántas siguen pendientes y el porcentaje de "
-        "progreso. El porcentaje se redondea al entero más cercano; "
-        "si el evento no tiene subtareas, devuelve 0."
+        "Devuelve el total de subtareas del evento, cuántas están hechas "
+        "(`finalizadas`, que incluye las guardadas con el nombre viejo "
+        "`finalizado` o `completada`), cuántas siguen pendientes y el "
+        "porcentaje de progreso. El porcentaje se redondea al entero más "
+        "cercano (.5 sube); si el evento no tiene subtareas, devuelve 0."
     ),
     responses={
         200: OpenApiResponse(
@@ -723,18 +724,26 @@ def subtareas_by_evento(request, evento_id):
     summary="Editar o reprogramar una gestión",
     description=(
         "Se pueden mandar solo los campos que cambian. La aplicación lo usa de "
-        "dos formas: **Editar** manda `titulo`, `descripcion`, `estado`, "
+        "cuatro formas: **Editar** manda `titulo`, `descripcion`, `estado`, "
         "`fecha_objetivo` y `horas_estimadas`; **Reprogramar** manda "
-        "`fecha_objetivo` y, si cambian, `horas_estimadas`.\n\n"
+        "`fecha_objetivo` y, si cambian, `horas_estimadas`; **Marcar como "
+        "hecha** manda `estado: \"hecha\"`; **Posponer** manda `estado: "
+        "\"pospuesta\"`, la nueva `fecha_objetivo` y una `nota` opcional.\n\n"
+        "`estado` acepta `por hacer`, `en curso`, `hecha` y `pospuesta`; los "
+        "nombres viejos (`finalizado`, `completada`, `pendiente`...) se leen "
+        "como su equivalente y se guardan con el nombre actual. `nota` es "
+        "opcional y admite hasta 200 caracteres: si pasa, responde 400 con un "
+        "mensaje corto. Si no se manda, la gestión conserva la que tenía.\n\n"
         "Cuando cambia la fecha o suben las horas, antes de guardar se suman "
-        "las horas de las gestiones sin finalizar del organizador para ese día, "
+        "las horas de las gestiones sin hacer del organizador para ese día, "
         "en todos sus eventos. Si el cambio le agrega horas al día y el total "
         "pasa del límite diario, no guarda y responde 409 con `detail`, "
         "`codigo`, y en `conflicto` las cifras, las horas que quedan libres, "
         "hasta tres fechas cercanas donde la gestión sí cabe (`fechas_sugeridas`) "
         "y el primer día posterior con espacio (`fecha_posponer`).\n\n"
-        "Bajar solo las horas, o cambiar título, descripción o estado, no da "
-        "conflicto.\n\n"
+        "Bajar solo las horas, cambiar título o descripción, o marcar la gestión "
+        "como hecha, no da conflicto. Una pospuesta sí cuenta sus horas en su "
+        "nueva fecha.\n\n"
         "El conflicto se resuelve con otra petición igual: con una fecha que "
         "tenga espacio, con la misma fecha y menos `horas_estimadas`, o con "
         "`fecha_posponer`."
@@ -750,8 +759,12 @@ def subtareas_by_evento(request, evento_id):
     examples=[
         doc.EJEMPLO_EDITAR_GESTION,
         doc.EJEMPLO_REPROGRAMAR,
+        doc.EJEMPLO_MARCAR_HECHA,
+        doc.EJEMPLO_POSPONER,
         doc.EJEMPLO_REDUCIR,
         doc.EJEMPLO_GUARDADA,
+        doc.EJEMPLO_ERROR_NOTA,
+        doc.EJEMPLO_ERROR_ESTADO,
         doc.EJEMPLO_SOBRECARGA,
     ],
 )
@@ -817,10 +830,12 @@ REGLA_HOY = (
     operation_id="gestiones_hoy",
     summary="Gestiones para la vista Hoy",
     description=(
-        "Gestiones sin finalizar del organizador, agrupadas en vencidas, para "
+        "Gestiones sin hacer del organizador, agrupadas en vencidas, para "
         "hoy y próximas. Primero van las vencidas, luego las de hoy y al final "
         "las próximas. Dentro de cada grupo van por fecha objetivo y, si dos "
-        "coinciden, primero la que toma menos horas."
+        "coinciden, primero la que toma menos horas. Las hechas no salen; las "
+        "pospuestas salen en su nueva fecha, con `estado: \"pospuesta\"` y su "
+        "`nota`."
     ),
     parameters=doc.FILTROS_HOY,
     responses={

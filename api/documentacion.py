@@ -239,6 +239,36 @@ EJEMPLO_EDITAR_GESTION = OpenApiExample(
     request_only=True,
 )
 
+EJEMPLO_MARCAR_HECHA = OpenApiExample(
+    "Marcar una gestión como hecha",
+    value={"estado": "hecha"},
+    request_only=True,
+)
+
+EJEMPLO_POSPONER = OpenApiExample(
+    "Posponer una gestión con nota",
+    value={
+        "estado": "pospuesta",
+        "fecha_objetivo": "2026-10-19",
+        "nota": "Esperando confirmación del salón",
+    },
+    request_only=True,
+)
+
+EJEMPLO_ERROR_NOTA = OpenApiExample(
+    "La nota es muy larga",
+    value={"nota": ["La nota no puede superar los 200 caracteres."]},
+    response_only=True,
+    status_codes=["400"],
+)
+
+EJEMPLO_ERROR_ESTADO = OpenApiExample(
+    "El estado no existe",
+    value={"estado": ["Estado inválido. Usa: por hacer, en curso, hecha o pospuesta."]},
+    response_only=True,
+    status_codes=["400"],
+)
+
 EJEMPLO_REDUCIR = OpenApiExample(
     "Resolver el conflicto reduciendo horas",
     value={"fecha_objetivo": "2026-10-12", "horas_estimadas": 1},
