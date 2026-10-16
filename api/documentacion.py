@@ -127,7 +127,6 @@ GESTION = {
     "evento": 31,
     "titulo": "Buscar proveedores",
     "descripcion": None,
-    "nota": "Confirmar disponibilidad con el proveedor",
     "fecha_objetivo": "2026-10-12",
     "horas_estimadas": "2.00",
     "estado": "por hacer",
