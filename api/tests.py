@@ -915,31 +915,35 @@ class HechasYPospuestasTests(ApiTestCase):
         self.entrar("prueba1@correo.com")
         self.evento = self.crear_evento()
 
-    def test_hoy_no_muestra_hechas_ni_pospuestas(self):
+    def test_hoy_no_muestra_hechas_pero_si_pospuestas(self):
         hoy = timezone.localdate()
+        manana = hoy + timedelta(days=1)
         pendiente = self.crear_gestion(self.evento, "Pendiente", hoy, 1)
-        for estado in ("hecha", "finalizado", "completada", "pospuesta"):
+        for estado in ("hecha", "finalizado", "completada"):
             gestion = self.crear_gestion(self.evento, estado, hoy, 1)
             Subtarea.objects.filter(pk=gestion).update(estado=estado)
+        pospuesta = self.crear_gestion(self.evento, "Pospuesta", manana, 1)
+        self.assertEqual(self.cambiar_gestion(pospuesta, estado="pospuesta").status_code, 200)
 
         respuesta = self.client.get("/api/subtareas/hoy/").data
 
         self.assertEqual([g["id"] for g in respuesta["para_hoy"]], [pendiente])
+        self.assertEqual([g["id"] for g in respuesta["proximas"]], [pospuesta])
+        self.assertEqual(respuesta["proximas"][0]["estado"], "pospuesta")
 
-    def test_las_horas_del_dia_no_cuentan_hechas_ni_pospuestas(self):
+    def test_las_horas_del_dia_no_cuentan_las_hechas(self):
         dia = timezone.localdate() + timedelta(days=1)
         otro_dia = dia + timedelta(days=1)
-        for estado in ("hecha", "pospuesta"):
-            gestion = self.crear_gestion(self.evento, estado, dia, 3)
-            Subtarea.objects.filter(pk=gestion).update(estado=estado)
+        hecha = self.crear_gestion(self.evento, "Hecha", dia, 6)
+        Subtarea.objects.filter(pk=hecha).update(estado="hecha")
         nueva = self.crear_gestion(self.evento, "Nueva", otro_dia, 6)
 
-        # Límite de 6 h: si las 6 h de hecha y pospuesta contaran, no cabría.
+        # Límite de 6 h: si las 6 h de la hecha contaran, no cabría.
         respuesta = self.cambiar_gestion(nueva, fecha_objetivo=dia)
 
         self.assertEqual(respuesta.status_code, 200)
 
-    def test_posponer_a_un_dia_lleno_no_da_conflicto(self):
+    def test_posponer_a_un_dia_lleno_da_conflicto(self):
         dia = timezone.localdate() + timedelta(days=1)
         otro_dia = dia + timedelta(days=1)
         self.crear_gestion(self.evento, "Día lleno", dia, 6)
@@ -947,5 +951,5 @@ class HechasYPospuestasTests(ApiTestCase):
 
         respuesta = self.cambiar_gestion(gestion, fecha_objetivo=dia, estado="pospuesta")
 
-        self.assertEqual(respuesta.status_code, 200)
-        self.assertEqual(respuesta.data["estado"], "pospuesta")
+        self.assertEqual(respuesta.status_code, 409)
+        self.assertEqual(respuesta.data["codigo"], "sobrecarga_diaria")

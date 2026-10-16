@@ -17,7 +17,6 @@ from . import documentacion as doc
 from .estados import (
     HECHA,
     MENSAJE_ESTADO_INVALIDO,
-    POSPUESTA,
     formas_de,
     normalizar_estado,
 )
@@ -247,9 +246,9 @@ def con_estado(*estados):
     return coincide
 
 
-def no_ocupa_horas(estado):
-    """Una gestión hecha o pospuesta ya no cuenta en las horas del día."""
-    return normalizar_estado(estado) in (HECHA, POSPUESTA)
+def esta_hecha(estado):
+    """Una gestión hecha ya no cuenta en las horas del día."""
+    return normalizar_estado(estado) == HECHA
 
 
 DIAS_PARA_SUGERIR = 14
@@ -264,7 +263,7 @@ def horas_por_dia(organizador, desde, hasta, sin_subtarea=None):
     gestiones = Subtarea.objects.filter(
         evento__organizador=organizador,
         fecha_objetivo__range=(desde, hasta),
-    ).exclude(con_estado(HECHA, POSPUESTA))
+    ).exclude(con_estado(HECHA))
 
     if sin_subtarea is not None:
         gestiones = gestiones.exclude(pk=sin_subtarea.pk)
@@ -364,11 +363,11 @@ def detectar_sobrecarga(organizador, subtarea, cambios):
     horas = cambios.get("horas_estimadas", subtarea.horas_estimadas)
     estado = cambios.get("estado", subtarea.estado)
 
-    if no_ocupa_horas(estado):
+    if esta_hecha(estado):
         return None
 
     horas_antes = Decimal("0")
-    if subtarea.fecha_objetivo == fecha and not no_ocupa_horas(subtarea.estado):
+    if subtarea.fecha_objetivo == fecha and not esta_hecha(subtarea.estado):
         horas_antes = subtarea.horas_estimadas
 
     if horas <= horas_antes:
@@ -861,8 +860,9 @@ def subtareas_hoy(request):
         evento__organizador=organizador
     )
 
-    # Por defecto, no mostrar hechas ni pospuestas en Vista Hoy
-    subtareas_base = subtareas_base.exclude(con_estado(HECHA, POSPUESTA))
+    # Por defecto, no mostrar las hechas en Vista Hoy; las pospuestas salen
+    # en su nueva fecha.
+    subtareas_base = subtareas_base.exclude(con_estado(HECHA))
 
     # Filtro por evento
     if evento_id:
