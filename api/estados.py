@@ -16,6 +16,7 @@ EQUIVALENTES = {
     "en_progreso": EN_CURSO,
     "en progreso": EN_CURSO,
     "finalizado": HECHA,
+    "completada": HECHA,
 }
 
 MENSAJE_ESTADO_INVALIDO = (

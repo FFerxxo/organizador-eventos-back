@@ -714,6 +714,15 @@ class EstadosDeGestionTests(ApiTestCase):
             Subtarea.objects.get(pk=gestion).estado, "hecha"
         )
 
+    def test_completada_vieja_cuenta_como_hecha(self):
+        gestion = self.crear_gestion(self.evento, "Reservar salón", DIA_X, 1)
+        Subtarea.objects.filter(pk=gestion).update(estado="completada")
+
+        progreso = self.client.get(f"/api/eventos/{self.evento}/progreso/").data
+        self.assertEqual(progreso["finalizadas"], 1)
+
+        self.assertEqual(self.cambiar_gestion(gestion, estado="completada").data["estado"], "hecha")
+
     def test_posponer_gestion_con_nota(self):
         gestion = self.crear_gestion(
             self.evento, "Reservar salón", DIA_X, 1
@@ -899,3 +908,33 @@ class ContactoDelClienteTests(ApiTestCase):
         self.assertEqual(otro_dato.data["cliente_contacto"], "Ana Torres")
         self.assertEqual(solo_nombre.status_code, 400)
         self.assertIn("cliente_telefono", solo_nombre.data)
+
+
+class HechasYPospuestasTests(ApiTestCase):
+    def setUp(self):
+        self.entrar("prueba1@correo.com")
+        self.evento = self.crear_evento()
+
+    def test_hoy_no_muestra_hechas_ni_pospuestas(self):
+        hoy = timezone.localdate()
+        pendiente = self.crear_gestion(self.evento, "Pendiente", hoy, 1)
+        for estado in ("hecha", "finalizado", "completada", "pospuesta"):
+            gestion = self.crear_gestion(self.evento, estado, hoy, 1)
+            Subtarea.objects.filter(pk=gestion).update(estado=estado)
+
+        respuesta = self.client.get("/api/subtareas/hoy/").data
+
+        self.assertEqual([g["id"] for g in respuesta["para_hoy"]], [pendiente])
+
+    def test_las_horas_del_dia_no_cuentan_hechas_ni_pospuestas(self):
+        dia = timezone.localdate() + timedelta(days=1)
+        otro_dia = dia + timedelta(days=1)
+        for estado in ("hecha", "pospuesta"):
+            gestion = self.crear_gestion(self.evento, estado, dia, 3)
+            Subtarea.objects.filter(pk=gestion).update(estado=estado)
+        nueva = self.crear_gestion(self.evento, "Nueva", otro_dia, 6)
+
+        # Límite de 6 h: si las 6 h de hecha y pospuesta contaran, no cabría.
+        respuesta = self.cambiar_gestion(nueva, fecha_objetivo=dia)
+
+        self.assertEqual(respuesta.status_code, 200)

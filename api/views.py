@@ -14,7 +14,13 @@ from django.db import IntegrityError
 from drf_spectacular.utils import extend_schema, OpenApiResponse, OpenApiExample
 
 from . import documentacion as doc
-from .estados import MENSAJE_ESTADO_INVALIDO, formas_de, normalizar_estado
+from .estados import (
+    HECHA,
+    MENSAJE_ESTADO_INVALIDO,
+    POSPUESTA,
+    formas_de,
+    normalizar_estado,
+)
 from .models import Organizador, Evento, Subtarea
 from .serializers import (
     EventoSerializer,
@@ -232,8 +238,17 @@ def formato_horas(horas):
     return texto or "0"
 
 
+def con_estado(*estados):
+    """Filtro por estado que incluye los nombres viejos y no distingue mayúsculas."""
+    coincide = Q()
+    for estado in estados:
+        for forma in formas_de(estado):
+            coincide |= Q(estado__iexact=forma)
+    return coincide
+
+
 def esta_finalizada(estado):
-    return str(estado).strip().lower() in ("hecha", "finalizado")
+    return normalizar_estado(estado) == HECHA
 
 
 DIAS_PARA_SUGERIR = 14
@@ -248,9 +263,7 @@ def horas_por_dia(organizador, desde, hasta, sin_subtarea=None):
     gestiones = Subtarea.objects.filter(
         evento__organizador=organizador,
         fecha_objetivo__range=(desde, hasta),
-    ).exclude(estado__iexact="hecha").exclude(
-        estado__iexact="finalizado"
-    )
+    ).exclude(con_estado(HECHA, POSPUESTA))
 
     if sin_subtarea is not None:
         gestiones = gestiones.exclude(pk=sin_subtarea.pk)
@@ -619,9 +632,7 @@ def evento_progreso(request, pk):
     subtareas = Subtarea.objects.filter(evento=evento)
     total = subtareas.count()
 
-    finalizadas = subtareas.filter(
-        Q(estado__iexact="hecha") | Q(estado__iexact="finalizado")
-    ).count()
+    finalizadas = subtareas.filter(con_estado(HECHA)).count()
 
     pendientes = total - finalizadas
 
@@ -849,12 +860,8 @@ def subtareas_hoy(request):
         evento__organizador=organizador
     )
 
-    # Por defecto, no mostrar finalizadas en Vista Hoy
-    subtareas_base = subtareas_base.exclude(
-        estado__iexact="hecha"
-    ).exclude(
-        estado__iexact="finalizado"
-    )
+    # Por defecto, no mostrar hechas ni pospuestas en Vista Hoy
+    subtareas_base = subtareas_base.exclude(con_estado(HECHA, POSPUESTA))
 
     # Filtro por evento
     if evento_id:
@@ -882,10 +889,7 @@ def subtareas_hoy(request):
             )
 
         # Incluye las gestiones guardadas con los nombres viejos del estado.
-        coincide = Q()
-        for forma in formas_de(estado_pedido):
-            coincide |= Q(estado__iexact=forma)
-        subtareas_base = subtareas_base.filter(coincide)
+        subtareas_base = subtareas_base.filter(con_estado(estado_pedido))
 
     vencidas = subtareas_base.filter(
         fecha_objetivo__lt=hoy
