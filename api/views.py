@@ -247,8 +247,9 @@ def con_estado(*estados):
     return coincide
 
 
-def esta_finalizada(estado):
-    return normalizar_estado(estado) == HECHA
+def no_ocupa_horas(estado):
+    """Una gestión hecha o pospuesta ya no cuenta en las horas del día."""
+    return normalizar_estado(estado) in (HECHA, POSPUESTA)
 
 
 DIAS_PARA_SUGERIR = 14
@@ -363,11 +364,11 @@ def detectar_sobrecarga(organizador, subtarea, cambios):
     horas = cambios.get("horas_estimadas", subtarea.horas_estimadas)
     estado = cambios.get("estado", subtarea.estado)
 
-    if esta_finalizada(estado):
+    if no_ocupa_horas(estado):
         return None
 
     horas_antes = Decimal("0")
-    if subtarea.fecha_objetivo == fecha and not esta_finalizada(subtarea.estado):
+    if subtarea.fecha_objetivo == fecha and not no_ocupa_horas(subtarea.estado):
         horas_antes = subtarea.horas_estimadas
 
     if horas <= horas_antes:

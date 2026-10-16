@@ -938,3 +938,14 @@ class HechasYPospuestasTests(ApiTestCase):
         respuesta = self.cambiar_gestion(nueva, fecha_objetivo=dia)
 
         self.assertEqual(respuesta.status_code, 200)
+
+    def test_posponer_a_un_dia_lleno_no_da_conflicto(self):
+        dia = timezone.localdate() + timedelta(days=1)
+        otro_dia = dia + timedelta(days=1)
+        self.crear_gestion(self.evento, "Día lleno", dia, 6)
+        gestion = self.crear_gestion(self.evento, "Posponer", otro_dia, 2)
+
+        respuesta = self.cambiar_gestion(gestion, fecha_objetivo=dia, estado="pospuesta")
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta.data["estado"], "pospuesta")
