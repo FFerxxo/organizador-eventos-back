@@ -40,7 +40,7 @@ def health_check(request):
     return Response({
         "status": "ok",
         "message": "API funcionando correctamente",
-        "sprint": "Sprint 3",
+        "sprint": "Sprint 4",
         "framework": "Django REST Framework"
     })
 
