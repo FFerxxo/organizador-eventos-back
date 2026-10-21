@@ -1,6 +1,9 @@
 from datetime import date, timedelta
 from decimal import Decimal
+from io import StringIO
+from unittest import mock
 
+from django.core.management import call_command
 from django.utils import timezone
 from rest_framework.test import APITestCase
 
@@ -953,3 +956,122 @@ class HechasYPospuestasTests(ApiTestCase):
 
         self.assertEqual(respuesta.status_code, 409)
         self.assertEqual(respuesta.data["codigo"], "sobrecarga_diaria")
+
+
+class EstabilidadTests(ApiTestCase):
+    """Sprint 5: la API siempre responde JSON, aun cuando algo falla."""
+
+    def test_health_dice_sprint_5_y_revisa_la_base(self):
+        respuesta = self.client.get("/api/health/")
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta.data["sprint"], "Sprint 5")
+        self.assertEqual(respuesta.data["base_de_datos"], "ok")
+
+    def test_una_ruta_que_no_existe_responde_json(self):
+        respuesta = self.client.get("/api/no-existe/")
+
+        self.assertEqual(respuesta.status_code, 404)
+        self.assertEqual(respuesta["Content-Type"], "application/json")
+        self.assertEqual(respuesta.json()["detail"], "La ruta que buscas no existe.")
+
+    def test_un_error_inesperado_responde_500_en_json(self):
+        self.entrar("estable@correo.com")
+
+        with mock.patch(
+            "api.views.Evento.objects.filter", side_effect=RuntimeError("caída")
+        ), self.assertLogs("api", level="ERROR"):
+            respuesta = self.client.get("/api/eventos/")
+
+        self.assertEqual(respuesta.status_code, 500)
+        self.assertIn("Intenta de nuevo", respuesta.data["detail"])
+
+    def test_hoy_con_evento_id_que_no_es_numero_responde_400(self):
+        self.entrar("estable@correo.com")
+
+        respuesta = self.client.get("/api/subtareas/hoy/?evento_id=abc")
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn("evento_id", respuesta.data)
+
+    def test_json_mal_formado_responde_400(self):
+        self.entrar("estable@correo.com")
+
+        respuesta = self.client.post(
+            "/api/eventos/", "{no es json", content_type="application/json"
+        )
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn("detail", respuesta.data)
+
+
+class CuentaDemoTests(APITestCase):
+    """Sprint 5: la cuenta demo para la evaluación del docente."""
+
+    def crear_demo(self):
+        call_command("crear_demo", stdout=StringIO())
+
+    def entrar_demo(self):
+        respuesta = self.client.post(
+            "/api/login/",
+            {"email": "demo@eventflow.com", "password": "demo1234"},
+            format="json",
+        )
+        self.assertEqual(respuesta.status_code, 200, respuesta.data)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {respuesta.data['token']}")
+
+    def test_la_cuenta_demo_entra_con_sus_datos(self):
+        self.crear_demo()
+        self.entrar_demo()
+
+        eventos = self.client.get("/api/eventos/").data
+        self.assertEqual(len(eventos), 3)
+
+    def test_volver_a_correrlo_no_duplica_nada(self):
+        self.crear_demo()
+        self.crear_demo()
+
+        organizador = Organizador.objects.get(email="demo@eventflow.com")
+        self.assertEqual(Evento.objects.filter(organizador=organizador).count(), 3)
+        self.assertEqual(
+            Subtarea.objects.filter(evento__organizador=organizador).count(), 14
+        )
+
+    def test_hoy_trae_vencidas_para_hoy_y_proximas(self):
+        self.crear_demo()
+        self.entrar_demo()
+
+        hoy = self.client.get("/api/subtareas/hoy/").data
+
+        self.assertTrue(hoy["vencidas"])
+        self.assertTrue(hoy["para_hoy"])
+        self.assertTrue(hoy["proximas"])
+        estados = {g["estado"] for grupo in ("vencidas", "para_hoy", "proximas") for g in hoy[grupo]}
+        self.assertNotIn("hecha", estados)
+        self.assertIn("pospuesta", estados)
+
+    def test_mover_una_gestion_a_manana_muestra_el_conflicto(self):
+        self.crear_demo()
+        self.entrar_demo()
+        decoracion = Subtarea.objects.get(titulo="Decoración floral")
+        manana = timezone.localdate() + timedelta(days=1)
+
+        respuesta = self.client.patch(
+            f"/api/subtareas/{decoracion.id}/",
+            {"fecha_objetivo": str(manana)},
+            format="json",
+        )
+
+        self.assertEqual(respuesta.status_code, 409)
+        self.assertEqual(
+            respuesta.data["detail"], "Quedarías con 9h planificadas (límite 6h)"
+        )
+
+    def test_hay_un_evento_al_100_por_ciento(self):
+        self.crear_demo()
+        self.entrar_demo()
+        cumpleanos = Evento.objects.get(nombre="Cumpleaños de Sofía")
+
+        progreso = self.client.get(f"/api/eventos/{cumpleanos.id}/progreso/").data
+
+        self.assertEqual(progreso["porcentaje"], 100)
