@@ -39,7 +39,8 @@ from .serializers import (
 def health_check(request):
     # Además de responder, revisa que la base de datos conteste.
     try:
-        connection.ensure_connection()
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
         base_de_datos = "ok"
     except Exception:
         base_de_datos = "sin conexión"
