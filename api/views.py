@@ -9,7 +9,7 @@ from rest_framework.response import Response
 from django.conf import settings
 from django.contrib.auth.hashers import check_password, make_password
 from django.core import signing
-from django.db import IntegrityError
+from django.db import IntegrityError, connection
 
 from drf_spectacular.utils import extend_schema, OpenApiResponse, OpenApiExample
 
@@ -37,11 +37,19 @@ from .serializers import (
 )
 @api_view(["GET"])
 def health_check(request):
+    # Además de responder, revisa que la base de datos conteste.
+    try:
+        connection.ensure_connection()
+        base_de_datos = "ok"
+    except Exception:
+        base_de_datos = "sin conexión"
+
     return Response({
         "status": "ok",
         "message": "API funcionando correctamente",
-        "sprint": "Sprint 4",
-        "framework": "Django REST Framework"
+        "sprint": "Sprint 5",
+        "framework": "Django REST Framework",
+        "base_de_datos": base_de_datos,
     })
 
 
@@ -881,6 +889,12 @@ def subtareas_hoy(request):
 
     # Filtro por evento
     if evento_id:
+        if not evento_id.isdigit():
+            return Response(
+                {"evento_id": ["El evento_id debe ser un número, por ejemplo 3."]},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         try:
             evento = Evento.objects.get(
                 id=evento_id,

@@ -18,6 +18,9 @@ class EstadoApiSerializer(serializers.Serializer):
     message = serializers.CharField()
     sprint = serializers.CharField()
     framework = serializers.CharField()
+    base_de_datos = serializers.CharField(
+        help_text="`ok` si la base de datos responde, `sin conexión` si no."
+    )
 
 
 class LoginSerializer(serializers.Serializer):
