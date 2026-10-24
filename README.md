@@ -85,7 +85,7 @@ Cada merge a `main` se despliega solo. Después de desplegar, `/api/health/` deb
 python manage.py test
 ```
 
-Corren sobre una base temporal, no tocan la de Supabase. Cubren login y registro, aislamiento entre organizadores, la vista Hoy y sus filtros, el límite diario, el conflicto de sobrecarga y su resolución, hechas y pospuestas, el progreso, los errores en JSON y la cuenta demo.
+Corren sobre una base temporal, no tocan la de Supabase. Cubren login y registro, aislamiento entre organizadores, la vista Hoy y sus filtros, el límite diario, el conflicto de sobrecarga y su resolución, hechas y pospuestas, el progreso y los errores en JSON.
 
 ## Endpoints
 
