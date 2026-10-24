@@ -1125,3 +1125,15 @@ class FechasValidasTests(ApiTestCase):
         )
 
         self.assertEqual(respuesta.status_code, 200, respuesta.data)
+
+    def test_tarea_de_antes_despues_del_evento_se_edita_si_no_cambia_su_fecha(self):
+        gestion = self.crear_gestion(self.evento, "Vieja", "2030-01-10", 1)
+        Subtarea.objects.filter(pk=gestion).update(fecha_objetivo="2030-01-20")
+        respuesta = self.client.patch(
+            f"/api/subtareas/{gestion}/",
+            {"titulo": "Nuevo título", "fecha_objetivo": "2030-01-20"},
+            format="json",
+        )
+
+        self.assertEqual(respuesta.status_code, 200, respuesta.data)
+        self.assertEqual(respuesta.data["titulo"], "Nuevo título")
