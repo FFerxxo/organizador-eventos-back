@@ -30,7 +30,7 @@ Para dejarla como nueva (por ejemplo el día de la revisión, para que las fecha
 python manage.py crear_demo
 ```
 
-El comando es seguro de repetir: borra solo los eventos de la cuenta demo y los vuelve a crear. En Render se corre desde la pestaña **Shell** del servicio; en local, con `DATABASE_URL` apuntando a Supabase.
+El comando es seguro de repetir: borra solo los eventos de la cuenta demo y los vuelve a crear. Se corre en local, con `DATABASE_URL` del `.env` apuntando a Supabase. No hace falta correrlo en Render. Solo toca la cuenta demo, no recibe otro correo.
 
 ## Cómo probar T1 a T4 con la cuenta demo
 
