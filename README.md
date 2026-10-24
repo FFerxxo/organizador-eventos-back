@@ -24,13 +24,13 @@ La cuenta trae tres eventos con fechas calculadas desde el día en que se prepar
 - **Lanzamiento Café Origen**: mañana está lleno justo hasta el límite de 6 h, para probar el conflicto de sobrecarga.
 - **Cumpleaños de Sofía**: todas las gestiones hechas, el evento está al 100 %.
 
-Para dejarla como nueva (por ejemplo el día de la revisión, para que las fechas queden alrededor de hoy):
+Para dejarla como nueva (por ejemplo el día de la revisión, para que las fechas queden alrededor de hoy) se necesita Node 18 o superior:
 
 ```bash
-python manage.py crear_demo
+node scripts/crear-demo.mjs
 ```
 
-El comando es seguro de repetir: borra solo los eventos de la cuenta demo y los vuelve a crear. Se corre en local, con `DATABASE_URL` del `.env` apuntando a Supabase. No hace falta correrlo en Render. Solo toca la cuenta demo, no recibe otro correo.
+El script usa solo la API pública (`/api/registro/` y los endpoints de eventos y gestiones), sin tocar la base ni el `.env`. Es seguro de repetir: borra los eventos de la cuenta demo y los vuelve a crear. Solo trabaja con esa cuenta, no recibe otro correo. Con `--ensayo` muestra lo que haría sin llamar a la API, y con la variable `BACK` se puede apuntar a otro servidor (por ejemplo `BACK=http://localhost:8000`).
 
 ## Cómo probar T1 a T4 con la cuenta demo
 
@@ -85,7 +85,7 @@ Cada merge a `main` se despliega solo. Después de desplegar, `/api/health/` deb
 python manage.py test
 ```
 
-Corren sobre una base temporal, no tocan la de Supabase. Cubren login y registro, aislamiento entre organizadores, la vista Hoy y sus filtros, el límite diario, el conflicto de sobrecarga y su resolución, hechas y pospuestas, el progreso, los errores en JSON y la cuenta demo.
+Corren sobre una base temporal, no tocan la de Supabase. Cubren login y registro, aislamiento entre organizadores, la vista Hoy y sus filtros, el límite diario, el conflicto de sobrecarga y su resolución, hechas y pospuestas, el progreso y los errores en JSON.
 
 ## Endpoints
 
