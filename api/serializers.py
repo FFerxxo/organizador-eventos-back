@@ -119,6 +119,10 @@ class SubtareaSerializer(serializers.ModelSerializer):
         return estado
 
     def validate_fecha_objetivo(self, value):
+        # Si la fecha no cambia no se revisa: así las tareas de antes que ya
+        # quedaron después del evento se pueden seguir editando.
+        if self.instance is not None and value == self.instance.fecha_objetivo:
+            return value
         # Al crear, la vista pasa el evento; al editar sale de la gestión.
         evento = self.context.get("evento") or getattr(self.instance, "evento", None)
         if evento is None:
