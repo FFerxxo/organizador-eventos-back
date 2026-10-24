@@ -890,7 +890,7 @@ def subtareas_hoy(request):
 
     # Filtro por evento
     if evento_id:
-        if not evento_id.isdigit():
+        if not evento_id.isdecimal():
             return Response(
                 {"evento_id": ["El evento_id debe ser un número, por ejemplo 3."]},
                 status=status.HTTP_400_BAD_REQUEST
