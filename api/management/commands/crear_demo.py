@@ -93,14 +93,11 @@ def contacto(evento):
 class Command(BaseCommand):
     help = "Crea o reinicia la cuenta demo con eventos de ejemplo para T1 a T4."
 
-    def add_arguments(self, parser):
-        parser.add_argument("--email", default=EMAIL_DEMO)
-        parser.add_argument("--password", default=PASSWORD_DEMO)
-
     @transaction.atomic
     def handle(self, *args, **opciones):
-        email = opciones["email"].strip().lower()
-        password = opciones["password"]
+        # Solo toca la cuenta demo: no recibe otro correo para no borrar cuentas reales.
+        email = EMAIL_DEMO
+        password = PASSWORD_DEMO
         hoy = timezone.localdate()
 
         organizador, creada = Organizador.objects.get_or_create(

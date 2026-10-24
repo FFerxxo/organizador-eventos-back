@@ -994,6 +994,14 @@ class EstabilidadTests(ApiTestCase):
         self.assertEqual(respuesta.status_code, 400)
         self.assertIn("evento_id", respuesta.data)
 
+    def test_hoy_con_evento_id_con_superindice_responde_400(self):
+        self.entrar("estable@correo.com")
+
+        respuesta = self.client.get("/api/subtareas/hoy/?evento_id=%C2%B2")
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn("evento_id", respuesta.data)
+
     def test_json_mal_formado_responde_400(self):
         self.entrar("estable@correo.com")
 
