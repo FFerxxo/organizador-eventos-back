@@ -18,7 +18,7 @@ ALLOWED_HOSTS = [
     host.strip()
     for host in os.getenv(
         "ALLOWED_HOSTS",
-        "127.0.0.1,localhost,organizador-eventos-back.onrender.com"
+        "127.0.0.1,localhost,eventflow-back.onrender.com,organizador-eventos-back.onrender.com"
     ).split(",")
     if host.strip()
 ]
@@ -110,7 +110,7 @@ CORS_ALLOWED_ORIGINS = [
     origin.strip()
     for origin in os.getenv(
         "CORS_ALLOWED_ORIGINS",
-        "http://localhost:5173,https://organizador-eventos-front-vercel.vercel.app"
+        "http://localhost:5173,https://eventflow-front-two.vercel.app,https://organizador-eventos-front-vercel.vercel.app"
     ).split(",")
     if origin.strip()
 ]
@@ -119,7 +119,7 @@ CSRF_TRUSTED_ORIGINS = [
     origin.strip()
     for origin in os.getenv(
         "CSRF_TRUSTED_ORIGINS",
-        "http://localhost:5173,https://organizador-eventos-front-vercel.vercel.app"
+        "http://localhost:5173,https://eventflow-front-two.vercel.app,https://organizador-eventos-front-vercel.vercel.app"
     ).split(",")
     if origin.strip()
 ]
@@ -129,6 +129,19 @@ REST_FRAMEWORK = {
     # La sesión se valida con el token propio (ver obtener_organizador_autenticado),
     # no con la autenticación de DRF.
     "DEFAULT_AUTHENTICATION_CLASSES": [],
+    # Los errores inesperados también se responden en JSON (ver api/errores.py).
+    "EXCEPTION_HANDLER": "api.errores.manejar_excepcion",
+}
+
+# En Render los errores quedan en los logs del servicio.
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {"consola": {"class": "logging.StreamHandler"}},
+    "loggers": {
+        "api": {"handlers": ["consola"], "level": "INFO"},
+        "django.request": {"handlers": ["consola"], "level": "ERROR"},
+    },
 }
 
 SPECTACULAR_SETTINGS = {
