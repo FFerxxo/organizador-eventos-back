@@ -3,6 +3,7 @@ from decimal import Decimal
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.validators import validate_email
+from django.utils import timezone
 from rest_framework import serializers
 from .estados import MENSAJE_ESTADO_INVALIDO, normalizar_estado
 from .models import Evento, Subtarea
@@ -11,6 +12,7 @@ LIMITE_MINIMO = Decimal("1")
 LIMITE_MAXIMO = Decimal("16")
 MENSAJE_RANGO_LIMITE = "El límite debe estar entre 1 y 16 horas por día."
 MENSAJE_LIMITE_INVALIDO = "Escribe el límite como un número de horas, por ejemplo 6 o 4.5."
+MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"]
 
 
 class RegistroSerializer(serializers.Serializer):
@@ -115,6 +117,18 @@ class SubtareaSerializer(serializers.ModelSerializer):
         if estado is None:
             raise serializers.ValidationError(MENSAJE_ESTADO_INVALIDO)
         return estado
+
+    def validate_fecha_objetivo(self, value):
+        # Al crear, la vista pasa el evento; al editar sale de la gestión.
+        evento = self.context.get("evento") or getattr(self.instance, "evento", None)
+        if evento is None:
+            return value
+        dia_del_evento = timezone.localtime(evento.fecha_hora).date()
+        if value > dia_del_evento:
+            raise serializers.ValidationError(
+                f"Elige un día hasta el del evento ({dia_del_evento.day} {MESES[dia_del_evento.month - 1]})."
+            )
+        return value
 
     def validate_nota(self, value):
         if value and len(value) > 200:
@@ -267,6 +281,12 @@ class EventoSerializer(serializers.ModelSerializer):
             parte for parte in (nombre, telefono, correo) if parte
         )
         return datos
+
+    def validate_fecha_hora(self, value):
+        # Solo al crear: un evento que ya pasó se puede seguir editando.
+        if self.instance is None and value < timezone.now():
+            raise serializers.ValidationError("Esa fecha ya pasó. Revisa el día y la hora.")
+        return value
 
     def validate_lugar(self, value):
         if not value.strip():

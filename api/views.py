@@ -483,7 +483,7 @@ def limite_diario(request):
         "Obligatorios: nombre, tipo, fecha y hora, lugar y nombre del "
         "cliente; además hace falta el teléfono o el correo del cliente "
         "(basta con uno). `plazo_limite` es opcional y la aplicación ya no lo "
-        "pide."
+        "pide. La fecha y hora no puede ser anterior al momento de crearlo."
     ),
     request=EventoSerializer,
     examples=[doc.EJEMPLO_EVENTO_CREAR],
@@ -681,6 +681,7 @@ def evento_progreso(request, pk):
     tags=["Gestiones"],
     operation_id="gestiones_crear",
     summary="Agregar una gestión a un evento",
+    description="La `fecha_objetivo` no puede ser posterior al día del evento.",
     request=SubtareaSerializer,
     responses={
         201: SubtareaSerializer,
@@ -708,7 +709,7 @@ def subtareas_by_evento(request, evento_id):
         serializer = SubtareaSerializer(subtareas, many=True)
         return Response(serializer.data)
 
-    serializer = SubtareaSerializer(data=request.data)
+    serializer = SubtareaSerializer(data=request.data, context={"evento": evento})
     if serializer.is_valid():
         serializer.save(evento=evento)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
@@ -732,6 +733,7 @@ def subtareas_by_evento(request, evento_id):
     tags=["Gestiones"],
     summary="Editar o reprogramar una gestión",
     description=(
+        "La `fecha_objetivo` no puede ser posterior al día del evento. "
         "Se pueden mandar solo los campos que cambian. La aplicación lo usa de "
         "cuatro formas: **Editar** manda `titulo`, `descripcion`, `estado`, "
         "`fecha_objetivo` y `horas_estimadas`; **Reprogramar** manda "
