@@ -789,7 +789,7 @@ class ProgresoEventoTests(ApiTestCase):
             gestion = self.crear_gestion(
                 self.evento,
                 f"Gestión {i + 1}",
-                (date(2030, 1, 15) + timedelta(days=i)).isoformat(),
+                (date(2030, 1, 15) - timedelta(days=i)).isoformat(),
                 1,
             )
 
@@ -1009,3 +1009,119 @@ class EstabilidadTests(ApiTestCase):
 
         self.assertEqual(respuesta.status_code, 400)
         self.assertIn("detail", respuesta.data)
+
+
+class FechasValidasTests(ApiTestCase):
+    def setUp(self):
+        self.entrar("prueba1@correo.com")
+        self.evento = self.crear_evento()  # 15 ene 2030
+
+    def datos_evento(self, fecha_hora):
+        return {
+            "nombre": "Fiesta",
+            "tipo": "social",
+            "cliente_nombre": "Cliente de prueba",
+            "cliente_telefono": "300 123 4567",
+            "fecha_hora": fecha_hora,
+            "lugar": "Salón de prueba",
+        }
+
+    def test_evento_con_fecha_pasada_no_se_crea(self):
+        ayer = (timezone.now() - timedelta(days=1)).isoformat()
+        respuesta = self.client.post("/api/eventos/", self.datos_evento(ayer), format="json")
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertEqual(
+            str(respuesta.data["fecha_hora"][0]), "Esa fecha ya pasó. Revisa el día y la hora."
+        )
+
+    def test_evento_con_fecha_de_hoy_a_futuro_se_crea(self):
+        en_una_hora = (timezone.now() + timedelta(hours=1)).isoformat()
+        respuesta = self.client.post("/api/eventos/", self.datos_evento(en_una_hora), format="json")
+
+        self.assertEqual(respuesta.status_code, 201, respuesta.data)
+
+    def test_evento_pasado_se_puede_seguir_editando(self):
+        evento = Evento.objects.get(pk=self.evento)
+        Evento.objects.filter(pk=evento.pk).update(
+            fecha_hora=timezone.now() - timedelta(days=3)
+        )
+        respuesta = self.client.patch(
+            f"/api/eventos/{self.evento}/", {"lugar": "Otro salón"}, format="json"
+        )
+
+        self.assertEqual(respuesta.status_code, 200, respuesta.data)
+
+    def test_tarea_despues_del_evento_no_se_crea(self):
+        respuesta = self.client.post(
+            f"/api/eventos/{self.evento}/subtareas/",
+            {"titulo": "Tarde", "fecha_objetivo": "2030-01-16", "horas_estimadas": 1},
+            format="json",
+        )
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertEqual(
+            str(respuesta.data["fecha_objetivo"][0]),
+            "Elige un día hasta el del evento (15 ene).",
+        )
+
+    def test_tarea_el_mismo_dia_del_evento_se_guarda(self):
+        self.crear_gestion(self.evento, "Ese día", "2030-01-15", 1)
+
+    def test_tarea_no_se_puede_mover_despues_del_evento(self):
+        gestion = self.crear_gestion(self.evento, "Antes", "2030-01-10", 1)
+        respuesta = self.cambiar_gestion(gestion, fecha_objetivo="2030-01-16")
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn("fecha_objetivo", respuesta.data)
+
+    def test_tarea_se_puede_mover_al_dia_del_evento(self):
+        gestion = self.crear_gestion(self.evento, "Antes", "2030-01-10", 1)
+        respuesta = self.cambiar_gestion(gestion, fecha_objetivo="2030-01-15")
+
+        self.assertEqual(respuesta.status_code, 200, respuesta.data)
+
+    def test_evento_no_se_puede_mover_antes_de_sus_tareas(self):
+        self.crear_gestion(self.evento, "Ese día", "2030-01-15", 1)
+        respuesta = self.client.patch(
+            f"/api/eventos/{self.evento}/",
+            {"fecha_hora": "2030-01-10T18:00:00-05:00"},
+            format="json",
+        )
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertEqual(
+            str(respuesta.data["fecha_hora"][0]),
+            "Tienes tareas hasta el 15 ene. Muévelas antes o elige un día posterior.",
+        )
+
+    def test_evento_se_puede_mover_si_sigue_despues_de_sus_tareas(self):
+        self.crear_gestion(self.evento, "Antes", "2030-01-10", 1)
+        respuesta = self.client.patch(
+            f"/api/eventos/{self.evento}/",
+            {"fecha_hora": "2030-01-12T18:00:00-05:00"},
+            format="json",
+        )
+
+        self.assertEqual(respuesta.status_code, 200, respuesta.data)
+
+    def test_evento_se_puede_mover_al_mismo_dia_de_su_ultima_tarea(self):
+        self.crear_gestion(self.evento, "Ese día", "2030-01-15", 1)
+        respuesta = self.client.patch(
+            f"/api/eventos/{self.evento}/",
+            {"fecha_hora": "2030-01-15T20:00:00-05:00"},
+            format="json",
+        )
+
+        self.assertEqual(respuesta.status_code, 200, respuesta.data)
+
+    def test_evento_con_tareas_de_antes_cambia_de_hora_sin_problema(self):
+        gestion = self.crear_gestion(self.evento, "Vieja", "2030-01-15", 1)
+        Subtarea.objects.filter(pk=gestion).update(fecha_objetivo="2030-01-20")
+        respuesta = self.client.patch(
+            f"/api/eventos/{self.evento}/",
+            {"fecha_hora": "2030-01-15T20:00:00-05:00"},
+            format="json",
+        )
+
+        self.assertEqual(respuesta.status_code, 200, respuesta.data)
