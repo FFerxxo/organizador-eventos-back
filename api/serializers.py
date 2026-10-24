@@ -286,6 +286,22 @@ class EventoSerializer(serializers.ModelSerializer):
         # Solo al crear: un evento que ya pasó se puede seguir editando.
         if self.instance is None and value < timezone.now():
             raise serializers.ValidationError("Esa fecha ya pasó. Revisa el día y la hora.")
+
+        # Al editar, el día nuevo no puede quedar antes de sus tareas. Si solo
+        # cambia la hora, no se revisa: así los eventos de antes se pueden editar.
+        if self.instance is not None:
+            dia_nuevo = timezone.localtime(value).date()
+            dia_actual = timezone.localtime(self.instance.fecha_hora).date()
+            ultima = (
+                self.instance.subtareas.order_by("-fecha_objetivo")
+                .values_list("fecha_objetivo", flat=True)
+                .first()
+            )
+            if dia_nuevo != dia_actual and ultima and ultima > dia_nuevo:
+                raise serializers.ValidationError(
+                    f"Tienes tareas hasta el {ultima.day} {MESES[ultima.month - 1]}. "
+                    "Muévelas antes o elige un día posterior."
+                )
         return value
 
     def validate_lugar(self, value):

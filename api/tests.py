@@ -1080,3 +1080,48 @@ class FechasValidasTests(ApiTestCase):
         respuesta = self.cambiar_gestion(gestion, fecha_objetivo="2030-01-15")
 
         self.assertEqual(respuesta.status_code, 200, respuesta.data)
+
+    def test_evento_no_se_puede_mover_antes_de_sus_tareas(self):
+        self.crear_gestion(self.evento, "Ese día", "2030-01-15", 1)
+        respuesta = self.client.patch(
+            f"/api/eventos/{self.evento}/",
+            {"fecha_hora": "2030-01-10T18:00:00-05:00"},
+            format="json",
+        )
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertEqual(
+            str(respuesta.data["fecha_hora"][0]),
+            "Tienes tareas hasta el 15 ene. Muévelas antes o elige un día posterior.",
+        )
+
+    def test_evento_se_puede_mover_si_sigue_despues_de_sus_tareas(self):
+        self.crear_gestion(self.evento, "Antes", "2030-01-10", 1)
+        respuesta = self.client.patch(
+            f"/api/eventos/{self.evento}/",
+            {"fecha_hora": "2030-01-12T18:00:00-05:00"},
+            format="json",
+        )
+
+        self.assertEqual(respuesta.status_code, 200, respuesta.data)
+
+    def test_evento_se_puede_mover_al_mismo_dia_de_su_ultima_tarea(self):
+        self.crear_gestion(self.evento, "Ese día", "2030-01-15", 1)
+        respuesta = self.client.patch(
+            f"/api/eventos/{self.evento}/",
+            {"fecha_hora": "2030-01-15T20:00:00-05:00"},
+            format="json",
+        )
+
+        self.assertEqual(respuesta.status_code, 200, respuesta.data)
+
+    def test_evento_con_tareas_de_antes_cambia_de_hora_sin_problema(self):
+        gestion = self.crear_gestion(self.evento, "Vieja", "2030-01-15", 1)
+        Subtarea.objects.filter(pk=gestion).update(fecha_objetivo="2030-01-20")
+        respuesta = self.client.patch(
+            f"/api/eventos/{self.evento}/",
+            {"fecha_hora": "2030-01-15T20:00:00-05:00"},
+            format="json",
+        )
+
+        self.assertEqual(respuesta.status_code, 200, respuesta.data)

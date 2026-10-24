@@ -527,7 +527,11 @@ def eventos_list_create(request):
     methods=["PUT", "PATCH"],
     tags=["Eventos"],
     summary="Editar un evento",
-    description="Se pueden mandar solo los campos que cambian.",
+    description=(
+        "Se pueden mandar solo los campos que cambian. Si cambia el día del "
+        "evento, no puede quedar antes de la última tarea: responde 400 en "
+        "`fecha_hora`."
+    ),
     request=EventoSerializer,
     responses={
         200: EventoSerializer,
