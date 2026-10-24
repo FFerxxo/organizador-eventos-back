@@ -1092,7 +1092,7 @@ class FechasValidasTests(ApiTestCase):
         self.assertEqual(respuesta.status_code, 400)
         self.assertEqual(
             str(respuesta.data["fecha_hora"][0]),
-            "Tienes tareas hasta el 15 ene. Muévelas antes o elige un día posterior.",
+            "Pasa esas tareas a un día anterior o elige un día desde el 15 ene.",
         )
 
     def test_evento_se_puede_mover_si_sigue_despues_de_sus_tareas(self):

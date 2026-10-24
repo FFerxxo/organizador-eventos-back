@@ -299,8 +299,8 @@ class EventoSerializer(serializers.ModelSerializer):
             )
             if dia_nuevo != dia_actual and ultima and ultima > dia_nuevo:
                 raise serializers.ValidationError(
-                    f"Tienes tareas hasta el {ultima.day} {MESES[ultima.month - 1]}. "
-                    "Muévelas antes o elige un día posterior."
+                    "Pasa esas tareas a un día anterior o elige un día desde el "
+                    f"{ultima.day} {MESES[ultima.month - 1]}."
                 )
         return value
 
